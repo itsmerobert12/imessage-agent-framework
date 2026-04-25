@@ -30,4 +30,23 @@ export const logger = winston.createLogger({
   ],
 });
 
+class Metrics {
+  private counters = new Map<string, number>();
+
+  record(name: string, value: number): void {
+    this.counters.set(name, (this.counters.get(name) || 0) + value);
+    logger.debug(`metric ${name}=${value}`);
+  }
+
+  get(name: string): number {
+    return this.counters.get(name) || 0;
+  }
+
+  snapshot(): Record<string, number> {
+    return Object.fromEntries(this.counters);
+  }
+}
+
+export const metrics = new Metrics();
+
 export default logger;

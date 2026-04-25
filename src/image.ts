@@ -3,7 +3,7 @@
  * Uses OpenAI DALL-E for generation
  */
 
-import { logger } from './observability';
+import { logger } from './state/observability';
 
 export class ImageGenerator {
   private apiKey: string | undefined;

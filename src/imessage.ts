@@ -9,7 +9,7 @@ import { execSync } from 'child_process';
 import path from 'path';
 import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
-import { logger } from './observability';
+import { logger } from './state/observability';
 import { StateManager } from './state';
 
 export interface Message {

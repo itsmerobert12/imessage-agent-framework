@@ -7,7 +7,7 @@ import { LLMProvider, LLMResponse } from './llm';
 import { SearchProvider } from './search';
 import { ImageGenerator } from './image';
 import { CacheManager } from './cache';
-import { logger } from './observability';
+import { logger } from './state/observability';
 import { Message } from './imessage';
 
 export interface AgentConfig {

@@ -2,7 +2,7 @@
  * Cache Manager - In-memory message caching with TTL
  */
 
-import { logger } from './observability';
+import { logger } from './state/observability';
 
 interface CacheEntry { value: string; expiry: number; }
 

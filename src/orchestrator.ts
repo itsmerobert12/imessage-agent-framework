@@ -5,7 +5,7 @@
 
 import { Agent, AgentConfig, agentFactory } from './agents';
 import { iMessageBridge, Message } from './imessage';
-import { logger } from './observability';
+import { logger } from './state/observability';
 
 export interface OrchestratorConfig {
   maxConcurrentAgents: number;

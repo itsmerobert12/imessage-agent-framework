@@ -5,7 +5,7 @@
 import { iMessageBridge } from './imessage';
 import { Orchestrator } from './orchestrator';
 import { agentFactory, AgentConfig } from './agents';
-import { logger } from './observability';
+import { logger } from './state/observability';
 import readline from 'readline';
 
 export class CLIManager {

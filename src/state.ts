@@ -6,7 +6,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { logger } from './observability';
+import { logger } from './state/observability';
 
 export class StateManager {
   private db: Database.Database;

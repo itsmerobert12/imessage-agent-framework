@@ -10,7 +10,7 @@ import readline from 'readline';
 import { iMessageBridge } from './imessage';
 import { Orchestrator } from './orchestrator';
 import { CLIManager } from './cli-local';
-import { logger } from './observability';
+import { logger } from './state/observability';
 
 const bridge = new iMessageBridge();
 const orchestrator = new Orchestrator(bridge);

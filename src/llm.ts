@@ -5,7 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { logger } from './observability';
+import { logger } from './state/observability';
 
 export interface ChatRequest {
   model: 'smart' | 'fast' | 'creative';

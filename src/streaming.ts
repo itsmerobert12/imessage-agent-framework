@@ -3,7 +3,7 @@
  * Enables chunked responses for long agent outputs
  */
 
-import { logger } from './observability';
+import { logger } from './state/observability';
 
 export class StreamingHandler {
   private chunkSize: number;

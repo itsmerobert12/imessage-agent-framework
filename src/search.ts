@@ -3,7 +3,7 @@
  * Supports Tavily API with fallback to basic fetch
  */
 
-import { logger } from './observability';
+import { logger } from './state/observability';
 
 export class SearchProvider {
   private tavilyKey: string | undefined;

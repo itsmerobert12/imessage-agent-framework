@@ -29,9 +29,33 @@ async function main() {
   logger.info(`Agent Framework v2.0 starting — transport: ${transportName}`);
   // 1. Initialize LLM provider
   const llm = new LLMProvider();
-  if (llm.availableProviders.size === 0) {
-    logger.error('No LLM providers configured! Set at least one API key in .env');
+
+  // Check Ollama availability — provides local fallback resilience
+  const ollamaHost = process.env.OLLAMA_HOST || 'http://localhost:11434';
+  let ollamaUp = false;
+  try {
+    const res = await fetch(`${ollamaHost}/api/tags`);
+    if (res.ok) {
+      ollamaUp = true;
+      const data: any = await res.json();
+      const names = (data.models || []).map((m: any) => m.name);
+      logger.info(`Ollama up at ${ollamaHost} — local models: ${names.join(', ') || '(none pulled)'}`);
+    }
+  } catch {
+    if (process.env.OLLAMA_ENABLED === 'true') {
+      logger.warn(`OLLAMA_ENABLED=true but Ollama not reachable at ${ollamaHost} — fallback unavailable`);
+    } else {
+      logger.info(`Ollama not running at ${ollamaHost} — local fallback disabled`);
+    }
+  }
+
+  const cloudConfigured = ['anthropic', 'openai', 'openrouter'].some(p => llm.availableProviders.has(p));
+  if (!cloudConfigured && !ollamaUp) {
+    logger.error('No LLM providers available! Set an API key in .env or start Ollama locally.');
     process.exit(1);
+  }
+  if (!cloudConfigured) {
+    logger.info('No cloud API keys configured — running in Ollama-only mode');
   }
 
   // 2. Initialize skill library and memory (shared SQLite DB)

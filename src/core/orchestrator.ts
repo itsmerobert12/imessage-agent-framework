@@ -165,9 +165,26 @@ User message: "${message}"`;
         requiredTools: parsed.requiredTools || [],
       };
     } catch (err) {
-      logger.warn(`Intent classification failed, defaulting to conversation: ${err}`);
-      return { domain: 'conversation', complexity: 'simple', description: message.slice(0, 100), requiredTools: [] };
+      logger.warn(`Intent classification failed, using keyword classifier: ${err}`);
+      return this.keywordClassify(message);
     }
+  }
+
+  /** Simple keyword-based intent classifier — used when LLM classification fails. */
+  private keywordClassify(message: string): Intent {
+    const m = message.toLowerCase();
+    const codeKw = /\b(function|class|bug|error|code|stack ?trace|exception|compile|debug|refactor|typescript|javascript|python)\b/;
+    const searchKw = /\b(search|find|look ?up|google|research|what is|who is|when did|where is)\b/;
+    let domain: TaskDomain = 'conversation';
+    const requiredTools: string[] = [];
+    if (codeKw.test(m)) {
+      domain = 'coding';
+      requiredTools.push('code_exec', 'file_ops');
+    } else if (searchKw.test(m)) {
+      domain = 'factual';
+      requiredTools.push('search');
+    }
+    return { domain, complexity: 'simple', description: message.slice(0, 100), requiredTools };
   }
   /**
    * Build a system prompt dynamically from intent, skills, and memory.

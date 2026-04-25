@@ -96,8 +96,13 @@ export function selectModel(
   latencyPreference: LatencyTier = 'fast',
   availableProviders: Set<string> = new Set(['anthropic', 'openai', 'openrouter', 'ollama'])
 ): ModelProfile {
+  // If only Ollama is available (no cloud API keys), restrict to Ollama models
+  const cloudProviders = ['anthropic', 'openai', 'openrouter'];
+  const hasCloud = cloudProviders.some(p => availableProviders.has(p));
+  const effectiveProviders = hasCloud ? availableProviders : new Set(['ollama']);
+
   const candidates = MODEL_REGISTRY
-    .filter(m => availableProviders.has(m.provider))
+    .filter(m => effectiveProviders.has(m.provider))
     .filter(m => m.strengths.includes(domain))
     .sort((a, b) => {
       // Score: strength match count + cost alignment + latency alignment
@@ -117,8 +122,22 @@ export function selectModel(
       const bScore = bCostDist * 3 + bLatDist * 2 - bStrength;
       return aScore - bScore;
     });
-  return candidates[0] || MODEL_REGISTRY[1]; // fallback to Claude Sonnet
+  if (candidates[0]) return candidates[0];
+  // No domain match — fallback to any available model (prefer Ollama if no cloud)
+  const anyAvailable = MODEL_REGISTRY.find(m => effectiveProviders.has(m.provider));
+  return anyAvailable || MODEL_REGISTRY[1]; // last-resort fallback to Claude Sonnet
 }
+
+// ── Ollama fallback model mapping ──────────────────────────────
+const OLLAMA_FALLBACK_BY_DOMAIN: Record<TaskDomain, string[]> = {
+  coding: ['qwen2.5-coder:7b', 'deepseek-coder-v2', 'mistral:7b'],
+  reasoning: ['mistral:7b', 'gemma3:12b', 'llama3.1:8b'],
+  analysis: ['mistral:7b', 'gemma3:12b', 'llama3.1:8b'],
+  planning: ['mistral:7b', 'gemma3:12b', 'llama3.1:8b'],
+  creative: ['mistral:7b', 'llama3.1:8b'],
+  factual: ['mistral:7b', 'llama3.1:8b'],
+  conversation: ['mistral:7b', 'llama3.1:8b'],
+};
 
 // ── LLM Provider — executes requests against any provider ───────
 
@@ -128,6 +147,8 @@ export class LLMProvider {
   private openrouter: OpenAI | null = null;
   private ollama: Ollama | null = null;
   public availableProviders: Set<string> = new Set();
+  private ollamaModelsCache: Set<string> | null = null;
+  private ollamaModelsCacheAt = 0;
 
   constructor() {
     if (process.env.ANTHROPIC_API_KEY) {
@@ -145,23 +166,78 @@ export class LLMProvider {
       });
       this.availableProviders.add('openrouter');
     }
-    if (process.env.OLLAMA_HOST || process.env.OLLAMA_ENABLED === 'true') {
+    // Ollama is always initialized as a fallback safety net unless explicitly disabled
+    if (process.env.OLLAMA_ENABLED !== 'false') {
       this.ollama = new Ollama({ host: process.env.OLLAMA_HOST || 'http://localhost:11434' });
       this.availableProviders.add('ollama');
     }
     logger.info(`LLM providers available: ${[...this.availableProviders].join(', ') || 'NONE — set API keys!'}`);
   }
 
+  /** Fetch list of locally pulled Ollama models (cached for 60s). */
+  async listOllamaModels(): Promise<Set<string>> {
+    if (!this.ollama) return new Set();
+    if (this.ollamaModelsCache && Date.now() - this.ollamaModelsCacheAt < 60_000) {
+      return this.ollamaModelsCache;
+    }
+    try {
+      const resp = await this.ollama.list();
+      const models = new Set(resp.models.map(m => m.name));
+      this.ollamaModelsCache = models;
+      this.ollamaModelsCacheAt = Date.now();
+      return models;
+    } catch {
+      return new Set();
+    }
+  }
+
+  /** Pick the best locally-available Ollama model for the given domain. */
+  async pickOllamaFallback(domain: TaskDomain): Promise<ModelProfile | null> {
+    if (!this.ollama) return null;
+    const local = await this.listOllamaModels();
+    if (local.size === 0) return null;
+    const preferred = OLLAMA_FALLBACK_BY_DOMAIN[domain] || OLLAMA_FALLBACK_BY_DOMAIN.conversation;
+    for (const id of preferred) {
+      if (local.has(id)) {
+        const profile = MODEL_REGISTRY.find(m => m.id === id && m.provider === 'ollama');
+        if (profile) return profile;
+      }
+    }
+    // No preferred model is local — pick any local Ollama model from registry
+    for (const m of MODEL_REGISTRY) {
+      if (m.provider === 'ollama' && local.has(m.id)) return m;
+    }
+    return null;
+  }
+
   async chat(req: LLMRequest): Promise<LLMResponse> {
     const start = Date.now();
     let result: LLMResponse;
 
-    switch (req.model.provider) {
-      case 'anthropic': result = await this.chatAnthropic(req); break;
-      case 'openai': result = await this.chatOpenAI(req, this.openai!); break;
-      case 'openrouter': result = await this.chatOpenAI(req, this.openrouter!); break;
-      case 'ollama': result = await this.chatOllama(req); break;
-      default: throw new Error(`Unknown provider: ${req.model.provider}`);
+    try {
+      switch (req.model.provider) {
+        case 'anthropic': result = await this.chatAnthropic(req); break;
+        case 'openai': result = await this.chatOpenAI(req, this.openai!); break;
+        case 'openrouter': result = await this.chatOpenAI(req, this.openrouter!); break;
+        case 'ollama': result = await this.chatOllama(req); break;
+        default: throw new Error(`Unknown provider: ${req.model.provider}`);
+      }
+    } catch (err: any) {
+      // Cloud provider failed (rate limit, quota, network, missing key) — try Ollama fallback
+      if (req.model.provider !== 'ollama' && this.ollama) {
+        const domain = req.model.strengths[0] || 'conversation';
+        const fallback = await this.pickOllamaFallback(domain);
+        if (fallback) {
+          logger.warn(`[fallback] ${req.model.provider}/${req.model.name} failed (${err.message || err}); retrying with Ollama/${fallback.name}`);
+          const fbReq = { ...req, model: fallback, jsonMode: false };
+          result = await this.chatOllama(fbReq);
+          result.latencyMs = Date.now() - start;
+          logger.info(`[ollama:fallback] ${fallback.name}: ${result.tokensUsed} tokens, ${result.latencyMs}ms`);
+          return result;
+        }
+        logger.error(`[fallback] ${req.model.provider} failed and no local Ollama models available`);
+      }
+      throw err;
     }
 
     result.latencyMs = Date.now() - start;

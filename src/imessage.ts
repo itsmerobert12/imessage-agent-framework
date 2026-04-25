@@ -8,7 +8,7 @@ import Database from 'better-sqlite3';
 import { execSync } from 'child_process';
 import path from 'path';
 import os from 'os';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 import { logger } from './state/observability';
 import { StateManager } from './state';
 

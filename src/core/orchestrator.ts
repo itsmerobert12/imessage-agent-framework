@@ -12,7 +12,7 @@ import { SkillLibrary, Skill } from './skills';
 import { Memory } from './memory';
 import { ToolRegistry } from '../tools/registry';
 import { logger, metrics } from '../state/observability';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 
 // ── Intent Classification ──────────────────────────────────────
 

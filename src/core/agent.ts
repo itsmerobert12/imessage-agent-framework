@@ -11,7 +11,7 @@
 import { LLMProvider, LLMRequest, LLMResponse, ModelProfile, ChatMessage } from './llm';
 import { ToolRegistry, ToolResult } from '../tools/registry';
 import { logger } from '../state/observability';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 
 export interface AgentConfig {
   /** Generated on the fly — not a predefined type */
